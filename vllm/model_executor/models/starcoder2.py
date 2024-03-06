@@ -23,6 +23,7 @@ from typing import List, Optional, Tuple
 import torch
 from torch import nn
 
+from vllm.config import LoRAConfig
 from vllm.model_executor.input_metadata import InputMetadata
 from vllm.model_executor.sampling_metadata import SamplingMetadata
 from vllm.model_executor.layers.attention import PagedAttention
@@ -236,8 +237,10 @@ class Starcoder2ForCausalLM(nn.Module):
 
     def __init__(self,
                  config: Starcoder2Config,
-                 linear_method: Optional[LinearMethodBase] = None):
+                 linear_method: Optional[LinearMethodBase] = None,
+                 lora_config: Optional[LoRAConfig] = None):
         super().__init__()
+        del lora_config
         self.config = config
         self.model = Starcoder2Model(config, linear_method=linear_method)
         self.vocab_size = config.vocab_size
@@ -254,6 +257,31 @@ class Starcoder2ForCausalLM(nn.Module):
             )
             self.lm_head_weight = self.lm_head.weight
         self.sampler = Sampler(self.unpadded_vocab_size, config.vocab_size)
+
+    packed_modules_mapping = {
+        "qkv_proj": [
+            "q_proj",
+            "k_proj",
+            "v_proj",
+        ],
+        "gate_up_proj": [
+            "gate_proj",
+            "up_proj",
+        ],
+    }
+
+    supported_lora_modules = [
+            "q_proj",
+            "o_proj",
+            "k_proj",
+            "v_proj",
+            "gate_proj",
+            "up_proj",
+            "down_proj",
+    ]
+    # starcoder2 does not apply LoRA to the embedding layer.
+    embedding_modules = {}
+    embedding_padding_modules = []
 
     def forward(
         self,
